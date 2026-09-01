@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESD 십자말풀이 — 반도체 정전기 낱말 퍼즐</title>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+<style>
+:root{
+  --bg:#0e1116; --panel:#161b22; --panel2:#1c232d; --line:#2b3441;
+  --tx:#e6edf3; --tx2:#9aa7b4; --acc:#4f9cf9; --ok:#3fb950; --warn:#d29922; --err:#f85149;
+  --cell:#f5f7fa; --cellLock:#c8f0d0; --cellSel:#ffe9a8; --cellWord:#dbeafe;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--tx);
+  font-family:'Malgun Gothic','Segoe UI',sans-serif;font-size:14px}
+header{padding:14px 16px;background:linear-gradient(90deg,#121821,#1b2637);
+  border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+header h1{margin:0;font-size:18px}
+header .sub{color:var(--tx2);font-size:11.5px}
+.hud{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.hud div{background:#0f141b;border:1px solid var(--line);border-radius:8px;
+  padding:5px 12px;font-size:12px;text-align:center}
+.hud b{display:block;font-size:15px;font-family:Consolas,monospace}
+.hud .nm b{color:var(--acc)}
+.hud .sc b{color:var(--ok)}
+.hud .tm b{color:var(--warn)}
+
+.wrap{max-width:1120px;margin:0 auto;padding:14px;display:grid;
+  grid-template-columns:auto 1fr;gap:16px;align-items:start}
+@media(max-width:900px){.wrap{grid-template-columns:1fr}}
+
+/* ── 격자 ── */
+#gridBox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+#clueBar{min-height:40px;background:#0d1218;border:1px solid var(--acc);border-radius:8px;
+  padding:8px 12px;margin-bottom:10px;font-size:13px;line-height:1.5}
+#clueBar .no{color:var(--acc);font-weight:700}
+#grid{display:grid;gap:3px;touch-action:manipulation}
+.cell{position:relative;width:44px;height:44px}
+@media(max-width:520px){.cell{width:32px;height:32px}}
+.cell.block{background:#0a0e13;border-radius:5px;border:1px solid #1a212b}
+.cell input{width:100%;height:100%;border:1.5px solid #97a4b3;border-radius:5px;
+  background:var(--cell);color:#111;font-size:20px;font-weight:700;text-align:center;
+  font-family:'Malgun Gothic',sans-serif;padding:0;caret-color:#111}
+@media(max-width:520px){.cell input{font-size:15px}}
+.cell input:focus{outline:2px solid var(--acc);z-index:2;position:relative}
+.cell.inword input{background:var(--cellWord)}
+.cell.sel input{background:var(--cellSel)}
+.cell.lock input{background:var(--cellLock);color:#0a5c22;border-color:#69b979}
+.cell.wrongflash input{background:#ffc9c9;transition:background .15s}
+.cell .num{position:absolute;top:1px;left:3px;font-size:9px;color:#4a5866;z-index:3;
+  pointer-events:none;font-weight:700}
+.cell.lock .num{color:#3f7a4d}
+
+.gbtns{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+button{background:#222c38;border:1px solid var(--line);color:var(--tx);border-radius:8px;
+  padding:8px 14px;font-size:13px;cursor:pointer;font-family:inherit}
+button:hover{background:#2c3846}
+button.pri{background:var(--acc);border-color:var(--acc);color:#04101f;font-weight:700}
+button:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── 우측 ── */
+.side{display:flex;flex-direction:column;gap:14px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.card h2{margin:0;padding:9px 14px;font-size:12.5px;letter-spacing:.5px;color:var(--tx2);
+  background:var(--panel2);border-bottom:1px solid var(--line)}
+.card .bd{padding:10px 14px}
+.clues{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;font-size:12.5px}
+@media(max-width:520px){.clues{grid-template-columns:1fr}}
+.clues h3{margin:4px 0 6px;font-size:12px;color:var(--acc)}
+.clues div.c{padding:4px 6px;border-radius:6px;cursor:pointer;line-height:1.45;margin:1px 0}
+.clues div.c:hover{background:#212b37}
+.clues div.c.cur{background:#1c2a40;outline:1px solid var(--acc)}
+.clues div.c.done{color:#5f8f6c;text-decoration:line-through;text-decoration-color:#3fb95088}
+.clues .no{color:var(--acc);font-weight:700;margin-right:3px}
+
+/* ── 랭킹 ── */
+.rank-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;
+  font-size:13px;border-bottom:1px solid #202833}
+.rank-row:last-child{border-bottom:0}
+.rank-row.top{background:#241f0d}
+.rank-row .m{width:30px;text-align:center;font-size:14px}
+.rank-row .nm{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rank-row .meta{color:var(--tx2);font-size:10.5px}
+.rank-row .pt{font-family:Consolas,monospace;color:var(--ok);font-weight:700}
+.rank-row.me{outline:1px solid var(--acc)}
+#rankSrc{font-size:10.5px;color:var(--tx2);padding:0 14px 10px}
+
+/* ── 오버레이 ── */
+.ovl{position:fixed;inset:0;background:#0a0d12ee;display:flex;align-items:center;
+  justify-content:center;z-index:100;padding:16px}
+.ovl .box{width:100%;max-width:430px;background:var(--panel);border:1px solid var(--line);
+  border-radius:14px;padding:28px 26px;text-align:center;box-shadow:0 18px 60px #000a}
+.ovl h2{margin:0 0 6px;font-size:21px}
+.ovl p{color:var(--tx2);font-size:12.5px;line-height:1.7;margin:0 0 16px}
+.ovl input{width:100%;background:#0d1218;border:1px solid var(--line);color:var(--tx);
+  border-radius:8px;padding:11px;font-size:16px;text-align:center;font-family:inherit}
+.ovl input:focus{outline:none;border-color:var(--acc)}
+.ovl button.pri{width:100%;margin-top:12px;padding:11px;font-size:15px}
+.hidden{display:none!important}
+.score-line{display:flex;justify-content:space-between;font-size:13px;padding:5px 4px;
+  border-bottom:1px solid #202833;color:var(--tx2)}
+.score-line b{color:var(--tx);font-family:Consolas,monospace}
+.score-line.total{font-size:16px;color:var(--tx)}
+.score-line.total b{color:var(--ok);font-size:19px}
+#doneRank{margin-top:12px;font-size:14px;color:var(--warn)}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#1c2a40;
+  border:1px solid var(--acc);border-radius:10px;padding:10px 18px;font-size:13px;z-index:200;
+  opacity:0;transition:opacity .25s;pointer-events:none}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⚡ ESD 십자말풀이</h1>
+  <span class="sub">반도체 정전기 낱말 퍼즐 — 17단어를 모두 채우세요</span>
+  <div class="hud">
+    <div class="nm">이름<b id="hudName">-</b></div>
+    <div class="sc">점수<b id="hudScore">0</b></div>
+    <div class="tm">시간<b id="hudTime">0:00</b></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="gridBox">
+    <div id="clueBar">칸을 누르면 문제가 표시됩니다. 같은 칸을 다시 누르면 가로/세로가 전환됩니다.</div>
+    <div id="grid"></div>
+    <div class="gbtns">
+      <button id="btnHint">💡 힌트 — 한 글자 공개 (−50점)</button>
+      <button id="btnGiveup">포기하고 정답 보기</button>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="card">
+      <h2>문제</h2>
+      <div class="bd clues">
+        <div><h3>가로 열쇠</h3><div id="cluesA"></div></div>
+        <div><h3>세로 열쇠</h3><div id="cluesD"></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2 id="rankTitle">🌍 글로벌 순위 TOP 10</h2>
+      <div class="bd" id="rankList" style="padding:6px 10px"></div>
+      <div id="rankSrc"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 시작 화면 -->
+<div class="ovl" id="startOvl">
+  <div class="box">
+    <div style="font-size:38px">🧩</div>
+    <h2>ESD 십자말풀이</h2>
+    <p>반도체 · 정전기 용어 17개로 만든 낱말 퍼즐.<br>
+      단어를 맞히면 <b style="color:var(--ok)">글자당 100점</b>, 빨리 끝낼수록 시간 보너스!<br>
+      힌트 −50점 · 오답 −30점</p>
+    <input id="nameIn" maxlength="8" placeholder="이름을 입력하세요 (최대 8자)" autocomplete="off">
+    <button class="pri" id="btnStart">게임 시작</button>
+  </div>
+</div>
+
+<!-- 완료 화면 -->
+<div class="ovl hidden" id="doneOvl">
+  <div class="box">
+    <div style="font-size:38px" id="doneEmoji">🏆</div>
+    <h2 id="doneTitle">완성!</h2>
+    <div style="text-align:left;margin:14px 0">
+      <div class="score-line"><span>단어 점수</span><b id="dWord">0</b></div>
+      <div class="score-line"><span>시간 보너스</span><b id="dTime">0</b></div>
+      <div class="score-line"><span>힌트 / 오답 감점</span><b id="dPen">0</b></div>
+      <div class="score-line total"><span>최종 점수</span><b id="dTotal">0</b></div>
+    </div>
+    <div id="doneRank"></div>
+    <button class="pri" id="btnAgain">다시 도전</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══════════ 퍼즐 데이터 (교차·인접 검증 완료, 10×10) ═══════════ */
+const SIZE=10;
+const WORDS=[
+  {d:'A',r:0,c:0,a:'마찰대전',clue:'두 물체를 비비거나 접촉했다 뗄 때 전하가 이동하여 전기를 띠는 현상'},
+  {d:'A',r:0,c:6,a:'이온',clue:'전자를 잃거나 얻어 전기를 띤 원자나 분자'},
+  {d:'A',r:2,c:2,a:'방전',clue:'쌓여 있던 전하가 순간적으로 빠져나가는 현상. ESD의 "D"'},
+  {d:'A',r:3,c:1,a:'접지',clue:'전하를 대지로 흘려보내도록 땅과 연결하는 것. 어스(earth)'},
+  {d:'A',r:3,c:5,a:'웨이퍼',clue:'반도체 칩을 만드는 얇은 실리콘 원판'},
+  {d:'A',r:4,c:2,a:'제전',clue:'대전된 물체의 정전기를 없애는 것 (除電)'},
+  {d:'A',r:6,c:0,a:'정전용량',clue:'물체가 전하를 저장할 수 있는 능력. 단위는 패럿(F)'},
+  {d:'A',r:7,c:7,a:'반도체',clue:'도체와 절연체의 중간 성질을 가진 물질. 실리콘이 대표'},
+  {d:'A',r:8,c:0,a:'기판',clue:'전자 부품이 올라가는 바탕 판. PCB 또는 서브스트레이트'},
+  {d:'A',r:9,c:2,a:'항복전압',clue:'절연이 무너져 전류가 급격히 흐르기 시작하는 전압. 게이트 산화막 파괴의 기준'},
+  {d:'D',r:0,c:2,a:'대전방지제',clue:'표면 저항을 낮춰 정전기 발생을 막는 화학 물질. 포장재에 처리한다'},
+  {d:'D',r:0,c:6,a:'이오나이저',clue:'양·음이온을 만들어 대전된 물체를 중화시키는 제전 장치'},
+  {d:'D',r:4,c:3,a:'전하량',clue:'물체가 띠고 있는 전기의 양. 단위는 쿨롱(C)'},
+  {d:'D',r:6,c:0,a:'정전기',clue:'흐르지 않고 한곳에 머물러 있는 전기. 반도체 공정 최대의 적'},
+  {d:'D',r:5,c:9,a:'절연체',clue:'전기가 거의 통하지 않는 물질. 부도체'},
+  {d:'D',r:7,c:8,a:'도전성',clue:'전기가 잘 통하는 성질. ○○○ 매트, ○○○ 작업화'},
+  {d:'D',r:8,c:4,a:'대전',clue:'물체가 전하를 띠게 되는 것 (帶電)'},
+];
+
+/* ═══════════ 격자 구축 ═══════════ */
+const $=s=>document.querySelector(s);
+const sol=Array.from({length:SIZE},()=>Array(SIZE).fill(null)); // 정답 글자
+const cellWords=Array.from({length:SIZE},()=>Array(SIZE).fill(null).map(()=>({A:null,D:null})));
+WORDS.forEach((w,wi)=>{
+  w.i=wi; w.cells=[];
+  for(let k=0;k<w.a.length;k++){
+    const r=w.d==='A'?w.r:w.r+k, c=w.d==='A'?w.c+k:w.c;
+    if(sol[r][c]!==null&&sol[r][c]!==w.a[k]) console.error('격자 충돌',r,c,w.a);
+    sol[r][c]=w.a[k];
+    cellWords[r][c][w.d]=wi;
+    w.cells.push([r,c]);
+  }
+});
+// 번호 부여
+let num=1; const cellNum={};
+for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+  const starts=WORDS.filter(w=>w.r===r&&w.c===c);
+  if(starts.length){ cellNum[r+','+c]=num; starts.forEach(w=>w.no=num); num++; }
+}
+
+/* ═══════════ 상태 ═══════════ */
+const G={
+  name:'', score:0, t0:0, timer:null, playing:false,
+  sel:null, dir:'A',            // sel=[r,c]
+  locked:new Set(),             // 완성된 단어 index
+  lockedCells:new Set(),        // 'r,c' 확정 셀
+  wrongTried:new Set(),         // 단어별 최근 오답 상태(중복 감점 방지)
+  hints:0, wrongs:0, wordPts:0, uploaded:false, myEntry:null
+};
+
+/* ═══════════ DOM 구축 ═══════════ */
+const gridEl=$('#grid');
+gridEl.style.gridTemplateColumns=`repeat(${SIZE},auto)`;
+const inputs=Array.from({length:SIZE},()=>Array(SIZE).fill(null));
+for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+  const d=document.createElement('div');
+  if(sol[r][c]===null){ d.className='cell block'; gridEl.appendChild(d); continue; }
+  d.className='cell'; d.dataset.r=r; d.dataset.c=c;
+  const n=cellNum[r+','+c];
+  if(n){ const s=document.createElement('span'); s.className='num'; s.textContent=n; d.appendChild(s); }
+  const inp=document.createElement('input');
+  inp.autocomplete='off'; inp.spellcheck=false; inp.inputMode='text';
+  d.appendChild(inp); gridEl.appendChild(d);
+  inputs[r][c]=inp;
+  inp.addEventListener('focus',()=>selectCell(r,c,false));
+  d.addEventListener('mousedown',e=>{
+    if(G.sel&&G.sel[0]===r&&G.sel[1]===c) { toggleDir(r,c); e.preventDefault(); }
+  });
+  inp.addEventListener('compositionstart',()=>inp.dataset.comp='1');
+  inp.addEventListener('compositionend',()=>{ delete inp.dataset.comp; commit(inp,r,c); });
+  inp.addEventListener('input',()=>{ if(!inp.dataset.comp) commit(inp,r,c); });
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='Backspace'&&!inp.value){ moveSel(r,c,-1); e.preventDefault(); }
+    else if(e.key==='ArrowRight'){ G.dir='A'; moveTo(r,c+1); e.preventDefault(); }
+    else if(e.key==='ArrowLeft'){ G.dir='A'; moveTo(r,c-1); e.preventDefault(); }
+    else if(e.key==='ArrowDown'){ G.dir='D'; moveTo(r+1,c); e.preventDefault(); }
+    else if(e.key==='ArrowUp'){ G.dir='D'; moveTo(r-1,c); e.preventDefault(); }
+  });
+}
+function commit(inp,r,c){
+  if(G.lockedCells.has(r+','+c)){ inp.value=getLocked(r,c); return; }
+  let v=inp.value.replace(/[^가-힣a-zA-Z0-9]/g,'');
+  if(!v){ inp.value=''; return; }
+  const chars=[...v];
+  inp.value=chars[0];
+  checkWordsAt(r,c);
+  // 넘치는 글자는 다음 칸으로
+  let cur=[r,c];
+  for(let k=1;k<chars.length;k++){
+    cur=nextCell(cur[0],cur[1]);
+    if(!cur) break;
+    if(!G.lockedCells.has(cur[0]+','+cur[1])){
+      inputs[cur[0]][cur[1]].value=chars[k];
+      checkWordsAt(cur[0],cur[1]);
+    }
+  }
+  const nx=cur?nextCell(cur[0],cur[1]):null;
+  if(nx) moveTo(nx[0],nx[1]);
+}
+function getLocked(r,c){ return sol[r][c]; }
+function nextCell(r,c){
+  const [dr,dc]=G.dir==='A'?[0,1]:[1,0];
+  const nr=r+dr,nc=c+dc;
+  if(nr<SIZE&&nc<SIZE&&sol[nr]&&sol[nr][nc]!==null) return [nr,nc];
+  return null;
+}
+function moveSel(r,c,dirn){
+  const [dr,dc]=G.dir==='A'?[0,dirn]:[dirn,0];
+  moveTo(r+dr,c+dc);
+}
+function moveTo(r,c){
+  if(r<0||c<0||r>=SIZE||c>=SIZE||sol[r][c]===null) return;
+  inputs[r][c].focus();
+}
+function toggleDir(r,c){
+  const cw=cellWords[r][c];
+  const other=G.dir==='A'?'D':'A';
+  if(cw[other]!==null) G.dir=other;
+  paintSel(r,c);
+}
+function selectCell(r,c,toggle){
+  const cw=cellWords[r][c];
+  if(cw[G.dir]===null) G.dir=G.dir==='A'?'D':'A';
+  G.sel=[r,c];
+  paintSel(r,c);
+}
+function paintSel(r,c){
+  document.querySelectorAll('.cell.sel,.cell.inword').forEach(e=>e.classList.remove('sel','inword'));
+  const wi=cellWords[r][c][G.dir];
+  if(wi!==null){
+    WORDS[wi].cells.forEach(([rr,cc])=>inputs[rr][cc].parentNode.classList.add('inword'));
+    showClue(wi);
+  }
+  inputs[r][c].parentNode.classList.add('sel');
+  document.querySelectorAll('.clues .c').forEach(e=>e.classList.remove('cur'));
+  if(wi!==null){ const el=document.getElementById('clue'+wi); if(el) el.classList.add('cur'); }
+}
+function showClue(wi){
+  const w=WORDS[wi];
+  $('#clueBar').innerHTML=`<span class="no">${w.no}. ${w.d==='A'?'가로':'세로'}</span> — ${w.clue} <span style="color:var(--tx2)">(${w.a.length}글자)</span>`;
+}
+
+/* 문제 목록 */
+function buildClues(){
+  const A=$('#cluesA'), D=$('#cluesD');
+  WORDS.forEach(w=>{
+    const el=document.createElement('div');
+    el.className='c'; el.id='clue'+w.i;
+    el.innerHTML=`<span class="no">${w.no}.</span>${w.clue} (${w.a.length})`;
+    el.onclick=()=>{ G.dir=w.d; moveTo(w.r,w.c); selectCell(w.r,w.c,false); };
+    (w.d==='A'?A:D).appendChild(el);
+  });
+}
+buildClues();
+
+/* ═══════════ 채점 ═══════════ */
+function checkWordsAt(r,c){
+  ['A','D'].forEach(dir=>{
+    const wi=cellWords[r][c][dir];
+    if(wi===null||G.locked.has(wi)) return;
+    const w=WORDS[wi];
+    const val=w.cells.map(([rr,cc])=>inputs[rr][cc].value||'').join('');
+    if([...val].length<w.a.length){ G.wrongTried.delete(wi); return; }
+    if(val===w.a) lockWord(wi);
+    else{
+      if(!G.wrongTried.has(wi)){
+        G.wrongTried.add(wi);
+        addScore(-30); G.wrongs++;
+        toast('앗, 틀렸어요 −30점');
+      }
+      w.cells.forEach(([rr,cc])=>{
+        const cell=inputs[rr][cc].parentNode;
+        cell.classList.add('wrongflash');
+        setTimeout(()=>cell.classList.remove('wrongflash'),450);
+      });
+    }
+  });
+}
+function lockWord(wi){
+  const w=WORDS[wi];
+  G.locked.add(wi);
+  w.cells.forEach(([rr,cc])=>{
+    G.lockedCells.add(rr+','+cc);
+    inputs[rr][cc].value=sol[rr][cc];
+    inputs[rr][cc].readOnly=true;
+    inputs[rr][cc].parentNode.classList.add('lock');
+  });
+  const pts=w.a.length*100;
+  G.wordPts+=pts; addScore(pts);
+  document.getElementById('clue'+wi).classList.add('done');
+  toast(`「${w.a}」 정답! +${pts}점`);
+  if(G.locked.size===WORDS.length) finish(true);
+}
+function addScore(v){ G.score+=v; $('#hudScore').textContent=G.score; }
+
+/* 힌트 */
+$('#btnHint').onclick=()=>{
+  if(!G.playing||!G.sel) { toast('힌트를 받을 칸을 먼저 선택하세요'); return; }
+  const [r,c]=G.sel;
+  if(G.lockedCells.has(r+','+c)){ toast('이미 확정된 칸입니다'); return; }
+  inputs[r][c].value=sol[r][c];
+  G.lockedCells.add(r+','+c);
+  inputs[r][c].readOnly=true;
+  inputs[r][c].parentNode.classList.add('lock');
+  G.hints++; addScore(-50);
+  toast('힌트 사용 −50점');
+  checkWordsAt(r,c);
+};
+$('#btnGiveup').onclick=()=>{
+  if(!G.playing) return;
+  if(!confirm('정답을 공개하면 점수가 기록되지 않습니다. 포기할까요?')) return;
+  for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++)
+    if(sol[r][c]!==null){ inputs[r][c].value=sol[r][c]; inputs[r][c].readOnly=true; }
+  finish(false);
+};
+
+/* ═══════════ 진행 ═══════════ */
+function fmtT(s){ return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0'); }
+function startGame(){
+  const nm=$('#nameIn').value.trim().slice(0,8);
+  if(!nm){ $('#nameIn').focus(); return; }
+  G.name=nm;
+  try{ localStorage.setItem('xw-name',nm); }catch(e){}
+  $('#hudName').textContent=nm;
+  $('#startOvl').classList.add('hidden');
+  G.playing=true; G.t0=Date.now();
+  G.timer=setInterval(()=>{ $('#hudTime').textContent=fmtT((Date.now()-G.t0)/1000); },500);
+  // 첫 단어 선택
+  G.dir='A'; moveTo(0,0);
+}
+function finish(success){
+  G.playing=false; clearInterval(G.timer);
+  const sec=(Date.now()-G.t0)/1000;
+  const timeBonus=success?Math.max(0,Math.round((900-sec)*2)):0;
+  if(success) addScore(timeBonus);
+  const pen=G.hints*-50+G.wrongs*-30;
+  $('#doneEmoji').textContent=success?'🏆':'😅';
+  $('#doneTitle').textContent=success?`완성! (${fmtT(sec)})`:'다음에 다시 도전!';
+  $('#dWord').textContent='+'+G.wordPts;
+  $('#dTime').textContent='+'+timeBonus;
+  $('#dPen').textContent=pen;
+  $('#dTotal').textContent=success?G.score:'기록 없음';
+  $('#doneRank').textContent='';
+  if(success) uploadScore();
+  $('#doneOvl').classList.remove('hidden');
+}
+$('#btnAgain').onclick=()=>location.reload();
+
+/* ═══════════ 글로벌 랭킹 (esd-hunter 와 같은 Firebase, g:"xw" 태그로 구분) ═══════════ */
+const FIREBASE_CONFIG={
+  apiKey:"AIzaSyDCbE-ro9u7Nl2RtiQXgk3Kiz5l92h3qpk",
+  authDomain:"esd-hunter.firebaseapp.com",
+  databaseURL:"https://esd-hunter-default-rtdb.firebaseio.com",
+  projectId:"esd-hunter",
+  storageBucket:"esd-hunter.firebasestorage.app",
+  messagingSenderId:"264503214520",
+  appId:"1:264503214520:web:3324159fff92165960cf4d"
+};
+let fdb=null, globalRank=[];
+try{
+  if(typeof firebase!=='undefined'){
+    firebase.initializeApp(FIREBASE_CONFIG);
+    fdb=firebase.database();
+    fdb.ref('hof').orderByChild('s').limitToLast(100).on('value',snap=>{
+      const arr=[];
+      snap.forEach(ch=>{ const v=ch.val();
+        if(v&&v.g==='xw'&&typeof v.n==='string') arr.push(v); });
+      globalRank=arr.sort((a,b)=>(b.s-a.s)||(a.d-b.d));
+      renderRank();
+    },()=>{ fdb=null; renderRank(); });
+  }
+}catch(e){ fdb=null; }
+
+function loadLocal(){
+  try{ const v=JSON.parse(localStorage.getItem('xw-rank')||'[]'); return Array.isArray(v)?v:[]; }
+  catch(e){ return []; }
+}
+function uploadScore(){
+  if(G.uploaded) return; G.uploaded=true;
+  const entry={n:G.name,s:G.score,st:1,d:Date.now(),g:'xw'};
+  G.myEntry=entry;
+  if(fdb){ try{ fdb.ref('hof').push(entry); }catch(e){} }
+  try{
+    const loc=loadLocal(); loc.push(entry);
+    loc.sort((a,b)=>b.s-a.s);
+    localStorage.setItem('xw-rank',JSON.stringify(loc.slice(0,20)));
+  }catch(e){}
+  setTimeout(()=>{
+    const list=fdb?globalRank:loadLocal();
+    const pos=list.filter(e=>e.s>G.score).length+1;
+    $('#doneRank').textContent=fdb
+      ? `🌍 글로벌 ${pos}위! (총 ${list.length}명 참가)`
+      : `이 기기 기준 ${pos}위 (오프라인 — 접속 시 글로벌 순위 표시)`;
+  },1200);
+  renderRank();
+}
+function renderRank(){
+  const el=$('#rankList');
+  const list=(fdb?globalRank:loadLocal()).slice(0,10);
+  $('#rankTitle').textContent=fdb?'🌍 글로벌 순위 TOP 10':'🏆 이 기기 순위 TOP 10';
+  $('#rankSrc').textContent=fdb?'전 세계 도전자들과 실시간 경쟁 중':'오프라인 — 인터넷 연결 시 글로벌 순위로 전환됩니다';
+  el.innerHTML='';
+  if(!list.length){
+    el.innerHTML='<div style="color:var(--tx2);font-size:12px;padding:8px">아직 기록이 없어요 — 첫 챔피언이 되어보세요!</div>';
+    return;
+  }
+  const medals=['🥇','🥈','🥉'];
+  list.forEach((r,i)=>{
+    const row=document.createElement('div');
+    row.className='rank-row'+(i===0?' top':'')+(G.myEntry&&r.n===G.myEntry.n&&r.s===G.myEntry.s&&r.d===G.myEntry.d?' me':'');
+    const dt=new Date(r.d);
+    row.innerHTML=`<span class="m">${medals[i]||(i+1)+'위'}</span>
+      <span class="nm"></span>
+      <span class="meta">${dt.getMonth()+1}.${dt.getDate()}</span>
+      <span class="pt">${r.s}점</span>`;
+    row.querySelector('.nm').textContent=r.n;
+    el.appendChild(row);
+  });
+}
+renderRank();
+
+/* ═══════════ 토스트/초기화 ═══════════ */
+let toastT=null;
+function toast(msg){
+  const t=$('#toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),1800);
+}
+try{ $('#nameIn').value=localStorage.getItem('xw-name')||''; }catch(e){}
+$('#btnStart').onclick=startGame;
+$('#nameIn').addEventListener('keydown',e=>{ if(e.key==='Enter') startGame(); });
+window.addEventListener('beforeunload',e=>{ if(G.playing&&G.locked.size){e.preventDefault();e.returnValue='';} });
+</script>
+</body>
+</html>
